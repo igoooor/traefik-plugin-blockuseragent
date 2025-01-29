@@ -70,38 +70,38 @@ func New(_ context.Context, next http.Handler, config *Config, name string) (htt
 }
 
 func (b *BlockUserAgent) ServeHTTP(res http.ResponseWriter, req *http.Request) {
-	if req != nil {
-		userAgent := req.UserAgent()
+    // If there's no request or the request is HEAD/OPTIONS, skip the checks.
+    if req == nil || req.Method == http.MethodHead || req.Method == http.MethodOptions {
+        b.next.ServeHTTP(res, req)
+        return
+    }
 
-		for _, re := range b.regexpsAllow {
-			if re.MatchString(userAgent) {
-				b.next.ServeHTTP(res, req)
+    userAgent := req.UserAgent()
 
-				return
-			}
-		}
+    for _, re := range b.regexpsAllow {
+        if re.MatchString(userAgent) {
+            b.next.ServeHTTP(res, req)
+            return
+        }
+    }
 
-		for index, re := range b.regexpsDeny {
-			if re.MatchString(userAgent) {
-				message := &BlockUserAgentMessage{
-					Regex:      index,
-					UserAgent:  userAgent,
-					RemoteAddr: req.RemoteAddr,
-					Host:       req.Host,
-					RequestURI: req.RequestURI,
-				}
-				jsonMessage, err := json.Marshal(message)
+    for index, re := range b.regexpsDeny {
+        if re.MatchString(userAgent) {
+            message := &BlockUserAgentMessage{
+                Regex:      index,
+                UserAgent:  userAgent,
+                RemoteAddr: req.RemoteAddr,
+                Host:       req.Host,
+                RequestURI: req.RequestURI,
+            }
+            jsonMessage, err := json.Marshal(message)
+            if err == nil {
+                log.Printf("%s: %s", b.name, jsonMessage)
+            }
+            res.WriteHeader(http.StatusForbidden)
+            return
+        }
+    }
 
-				if err == nil {
-					log.Printf("%s: %s", b.name, jsonMessage)
-				}
-
-				res.WriteHeader(http.StatusForbidden)
-
-				return
-			}
-		}
-	}
-
-	b.next.ServeHTTP(res, req)
+    b.next.ServeHTTP(res, req)
 }
